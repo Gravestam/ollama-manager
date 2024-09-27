@@ -62,45 +62,54 @@ const getSystemInfo = async () => {
 
 const copyToClipboard = (text, sanitizeText = false) => {
 
-	try {
+    return new Promise((resolve, reject) => {
 
-		if (sanitizeText) {
+        try {
 
-			text = text
-				.replace(/```[a-z]*\n?/gi, '')   // Remove the code block language specifier (e.g., ```bash)
-				.replace(/```/g, '')             // Remove any closing triple backticks
-				.replace(/\n+/g, ' ')            // Replace newlines with spaces to make it a single line
-				.trim();                         // Trim any leading or trailing spaces
-		}
-		const clipboardProcess = spawn(program.opts().clipboardManager, [], {
-			stdio: ['pipe', 'ignore', 'ignore'], // Only pipe stdin to send text, ignore stdout and stderr
-		});
+            if (sanitizeText) {
 
-		clipboardProcess.stdin.write(text);
-		clipboardProcess.stdin.end();
+                text = text
+                    .replace(/```[a-z]*\n?/gi, '')   // Remove the code block language specifier (e.g., ```bash)
+                    .replace(/```/g, '')             // Remove any closing triple backticks
+                    .replace(/\n+/g, ' ')            // Replace newlines with spaces to make it a single line
+                    .trim();                         // Trim any leading or trailing spaces
+            }
 
-		const spinner = createSpinner(`Copying to clipboard using ${program.opts().clipboardManager}...`).start();
+            const clipboardProcess = spawn(program.opts().clipboardManager, [], {
+                stdio: ['pipe', 'ignore', 'ignore'], // Only pipe stdin to send text, ignore stdout and stderr
+            });
 
-		clipboardProcess.on('error', (error) => {
+            clipboardProcess.stdin.write(text);
+            clipboardProcess.stdin.end();
 
-			spinner.error({ text: `Error copying to clipboard using ${program.opts().clipboardManager}: ${error.message}` });
-		});
+            const spinner = createSpinner(`Copying to clipboard using ${program.opts().clipboardManager}...`).start();
 
-		clipboardProcess.on('close', (code) => {
+            clipboardProcess.on('error', (error) => {
+                spinner.error({ text: `Error copying to clipboard using ${program.opts().clipboardManager}: ${error.message}` });
+                reject(error);
+            });
 
-			if (code === 0) {
+            clipboardProcess.on('close', (code) => {
 
-				spinner.success({ text: `Command successfully copied to clipboard using ${program.opts().clipboardManager}.` });
-			} else {
+                if (code === 0) {
 
-				spinner.error({ text: `${program.opts().clipboardManager} exited with code ${code}.` });
-			}
-		});
+                    spinner.success({ text: `Command successfully copied to clipboard using ${program.opts().clipboardManager}.` });
+                    resolve();
+                }
+				else {
 
-	} catch (error) {
+                    spinner.error({ text: `${program.opts().clipboardManager} exited with code ${code}.` });
 
-		console.log(RED(`Error copying to clipboard: ${error.message}`));
-	}
+                    reject(new Error(`${program.opts().clipboardManager} exited with code ${code}`));
+                }
+            });
+
+        } catch (error) {
+
+            console.log(RED(`Error copying to clipboard: ${error.message}`));
+            reject(error);
+        }
+    });
 };
 
 const cliCommandPrompt = (systemInfo) => `Act as a natural language to ${systemInfo.user.shell} command translation engine on ${systemInfo.platform}. You are an expert in ${systemInfo.user.shell} on ${systemInfo.platform} and translate the question at the end to valid syntax.
@@ -424,93 +433,104 @@ const runModel = async (modelName) => {
 
 const cliModel = async () => {
 
-	const ollama = new Ollama({ host: HOST });
-	const systemInfo = await getSystemInfo();
-	const models = await getModels('list');
+    const ollama = new Ollama({ host: HOST });
+    const systemInfo = await getSystemInfo();
+    const models = await getModels('list');
 
-	if (models.length === 0) {
-		console.log(YELLOW('No models installed.'));
-		process.exit(1);
-	}
+    if (models.length === 0) {
 
-	let selectedModel = await selectModel(models, 'Please select a model for CLI command generation:');
+        console.log(YELLOW('No models installed.'));
+        process.exit(1);
+    }
 
-	log(GREEN(`Starting CLI command generation with model '${selectedModel.name}'...`));
+    let selectedModel = await selectModel(models, 'Please select a model for CLI command generation:');
 
-	const rl = readline.createInterface({
-		input: process.stdin,
-		output: process.stdout,
-		prompt: BLUE(`${systemInfo.user.username}: `),
-	});
+    log(GREEN(`Starting CLI command generation with model '${selectedModel.name}'...`));
 
-	let chatHistory = [];
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+        prompt: BLUE(`${systemInfo.user.username}: `),
+    });
 
-	const resumePrompt = () => rl.resume() && rl.prompt();
-	rl.prompt();
+    let chatHistory = [];
 
-	rl.on('line', async (userInput) => {
+    const resumePrompt = () => rl.resume() && rl.prompt();
 
-		rl.pause();
+    rl.prompt();
 
-		const spinner = createSpinner(`${selectedModel.name} is generating a shell command...`).start();
+    rl.on('line', async (userInput) => {
 
-		const cliPromptWithSystemInfo = cliCommandPrompt(systemInfo);
+        rl.pause();
 
-		chatHistory.push({
-			role: 'user',
-			content: `${cliPromptWithSystemInfo}: ${userInput}`
-		});
+        const spinner = createSpinner(`${selectedModel.name} is generating a shell command...`).start();
 
-		try {
-			const response = await ollama.chat({
-				model: selectedModel.name,
-				messages: chatHistory,
-				stream: false,
-				role: 'user',
-			});
+        const cliPromptWithSystemInfo = cliCommandPrompt(systemInfo);
 
-			const modelResponse = response.message.content.trim();
-			chatHistory.push({
-				role: 'assistant',
-				content: modelResponse,
-			});
+        chatHistory.push({
+            role: 'user',
+            content: `${cliPromptWithSystemInfo}: ${userInput}`
+        });
 
-			const formattedResponse = formatResponse(modelResponse);
+        try {
 
-			spinner.success({
-				text: `${GREEN(`${selectedModel.name}:`)} ${formattedResponse}`,
-			});
+            const response = await ollama.chat({
+                model: selectedModel.name,
+                messages: chatHistory,  // Keep history in the chat
+                stream: false,
+                role: 'user',
+            });
 
-			// Ask user if they want to use, regenerate, or copy the command
-			const actionResponse = await prompts({
-				type: 'select',
-				name: 'action',
-				message: YELLOW('What would you like to do with this command?'),
-				choices: [
-					{ title: 'Run a new command generation', value: 'new' },
-					{ title: 'Copy the command to clipboard', value: 'copy' },
-					{ title: 'Cancel', value: 'cancel' },
-				],
-			});
+            const modelResponse = response.message.content.trim();
 
-			if (actionResponse.action === 'copy') {
-				await copyToClipboard(modelResponse, true);
-				console.log(GREEN('Command copied to clipboard.'));
-				rl.close();
-				process.exit(0);
-			} else if (actionResponse.action === 'new') {
-				console.log(GREEN('Generating a new command...'));
-				resumePrompt();
-			} else {
-				console.log(YELLOW('Action canceled.'));
-				rl.close();
-				process.exit(0);
-			}
-		} catch (error) {
-			spinner.error({ text: 'Error generating shell command.' });
-			resumePrompt();
-		}
-	});
+            // Add the model's response to the chat history
+            chatHistory.push({
+                role: 'assistant',
+                content: modelResponse,
+            });
+
+            const formattedResponse = formatResponse(modelResponse);
+
+            spinner.success({
+                text: `${GREEN(`${selectedModel.name}:`)} ${formattedResponse}`,
+            });
+
+            const actionResponse = await prompts({
+                type: 'select',
+                name: 'action',
+                message: YELLOW('What would you like to do with this command?'),
+                choices: [
+                    { title: 'Run a new command generation', value: 'new' },
+                    { title: 'Copy the command to clipboard', value: 'copy' },
+                    { title: 'Cancel', value: 'cancel' },
+                ],
+            });
+
+            if (actionResponse.action === 'copy') {
+
+                await copyToClipboard(modelResponse, true);
+
+                // console.log(GREEN('Command copied to clipboard.'));
+
+                rl.close();
+                process.exit(0);
+            }
+			else if (actionResponse.action === 'new') {
+
+                resumePrompt();
+            }
+			else {
+
+                console.log(YELLOW('Action canceled.'));
+
+                rl.close();
+                process.exit(0);
+            }
+        } catch (error) {
+            spinner.error({ text: 'Error generating shell command.' });
+            resumePrompt();
+        }
+    });
 };
 
 const removeModel = async (modelName) => {
