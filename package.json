@@ -1,0 +1,18 @@
+{
+  "name": "ollama-manager",
+  "version": "1.0.0",
+  "main": "main.js",
+  "scripts": {},
+  "type": "module",
+  "author": "Gravestam",
+  "license": "MIT",
+  "description": "",
+  "dependencies": {
+    "chalk": "5.3.0",
+    "cli-highlight": "2.1.11",
+    "commander": "12.1.0",
+    "nanospinner": "1.1.0",
+    "ollama": "0.5.9",
+    "prompts": "2.4.2"
+  }
+}
