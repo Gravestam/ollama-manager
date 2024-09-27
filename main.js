@@ -119,7 +119,8 @@ Construct valid ${systemInfo.user.shell} command that solves the question
 Leverage help and man pages to ensure valid syntax and an optimal solution
 Be concise 
 Just show the commands 
-Return only plaintext 
+Return only plaintext
+Do not wrap code in \`\`
 Only show a single answer, but you can always chain commands together 
 Think step by step
 Only create valid syntax (you can use comments if it makes sense)
