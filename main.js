@@ -26,10 +26,7 @@ const SETTINGS = {
 	quiet: false
 };
 
-const CONFIG_FILE = path.join(
-	process.env.HOME || process.env.USERPROFILE,
-	'.ollama_script_config'
-);
+const CONFIG_FILE = path.join(process.env.HOME || process.env.USERPROFILE, '.ollama_script_config');
 
 const loadConfig = () => {
 
@@ -41,27 +38,35 @@ const loadConfig = () => {
 };
 
 const log = (message) => {
+
 	if (!SETTINGS.quiet) {
+
 		console.log(message);
 	}
 };
 
 const getSystemInfo = async () => {
+
 	const systemInfo = {
-		user: await os.userInfo(),
-		platform: await os.platform(),
-		type: await os.type(),
-		version: await os.version(),
-		network: await os.networkInterfaces(),
+		user: os.userInfo(),
+		platform: os.platform(),
+		type: os.type(),
+		version: os.version(),
+		network: os.networkInterfaces(),
 		eol: os.EOL
 	};
+
 	return systemInfo;
 };
 
 const copyToClipboard = (text, sanitizeText = false) => {
+
 	return new Promise((resolve, reject) => {
+
 		try {
+
 			if (sanitizeText) {
+
 				text = text
 					.replace(/```[a-z]*\n?/gi, '') // Remove the code block language specifier
 					.replace(/```/g, '') // Remove any closing triple backticks
@@ -84,15 +89,21 @@ const copyToClipboard = (text, sanitizeText = false) => {
 			});
 
 			clipboardProcess.on('close', (code) => {
+
 				if (code === 0) {
+
 					spinner.success({ text: `Command successfully copied to clipboard using ${program.opts().clipboardManager}.` });
 					resolve();
-				} else {
+				}
+				else {
+
 					spinner.error({ text: `${program.opts().clipboardManager} exited with code ${code}.` });
 					reject(new Error(`${program.opts().clipboardManager} exited with code ${code}`));
 				}
 			});
-		} catch (error) {
+		}
+		catch (error) {
+
 			console.log(SETTINGS.colors.red(`Error copying to clipboard: ${error.message}`));
 			reject(error);
 		}
@@ -132,27 +143,35 @@ Question:
 `;
 
 const getModels = async (cmd) => {
+
 	const ollama = new Ollama({ host: SETTINGS.host });
+
 	try {
+
 		if (cmd === 'list') {
+
 			const list = await ollama.list();
 			return list.models || [];
 		}
 
 		if (cmd === 'ps') {
+
 			const list = await ollama.ps();
 			return list.models || [];
 		}
 
 		console.log(SETTINGS.colors.red('Invalid command to get models.'));
 		process.exit(1);
-	} catch (error) {
+	}
+	catch (error) {
+
 		console.log(SETTINGS.colors.red('Error retrieving models.'));
 		process.exit(1);
 	}
 };
 
 const selectModel = async (models, promptMessage) => {
+
 	const response = await prompts({
 		type: 'select',
 		name: 'model',
@@ -164,6 +183,7 @@ const selectModel = async (models, promptMessage) => {
 	});
 
 	if (!response.model) {
+
 		console.log(SETTINGS.colors.yellow('No model selected.'));
 		process.exit(1);
 	}
@@ -172,6 +192,7 @@ const selectModel = async (models, promptMessage) => {
 };
 
 const confirmAction = async (message) => {
+
 	const response = await prompts({
 		type: 'confirm',
 		name: 'confirm',
@@ -180,56 +201,77 @@ const confirmAction = async (message) => {
 	});
 
 	if (!response.confirm) {
+
 		console.log(SETTINGS.colors.yellow('Action canceled by user.'));
 		process.exit(0);
 	}
 };
 
 const formatResponse = (text) => {
+
 	const lines = text.split('\n');
+
 	let language = '';
 	let inCodeBlock = false;
 	let formattedText = '';
 
 	lines.forEach((line, index) => {
+
 		if (line.startsWith('```')) {
+
 			inCodeBlock = !inCodeBlock;
+
 			if (inCodeBlock) {
+
 				language = line.replace('```', '').trim();
-			} else {
+			}
+			else {
+
 				language = '';
 				formattedText += SETTINGS.colors.nc('');
 			}
-		} else {
+		}
+		else {
+
 			if (inCodeBlock) {
+
 				const highlightedCode = highlight(line, {
 					language: language || 'plaintext',
 					ignoreIllegals: true
 				});
+
 				formattedText += SETTINGS.colors.codeBlockBg(highlightedCode) + SETTINGS.colors.nc('');
-			} else {
+			}
+			else {
+
 				formattedText += line;
 			}
 		}
 		if (index < lines.length - 1) {
+
 			formattedText += '\n';
 		}
 	});
+
 	return formattedText;
 };
 
 const createModel = async (baseModel, withSystemInfo) => {
+
 	const ollama = new Ollama({ host: SETTINGS.host });
 
 	if (!baseModel) {
+
 		const models = await getModels('list');
 
 		if (models.length === 0) {
+
 			console.log(SETTINGS.colors.yellow('No models installed.'));
 			process.exit(1);
 		}
 
 		const selectedBaseModel = await selectModel(models, 'Please select the base model for your new model:');
+
 		baseModel = selectedBaseModel.name;
 	}
 
@@ -242,6 +284,7 @@ const createModel = async (baseModel, withSystemInfo) => {
 	const newModelName = newModelResponse.modelName.trim();
 
 	if (!newModelName) {
+
 		console.log(SETTINGS.colors.red('Error: Model name cannot be empty.'));
 		process.exit(1);
 	}
@@ -255,11 +298,13 @@ const createModel = async (baseModel, withSystemInfo) => {
 	let systemPrompt = systemResponse.systemPrompt.trim();
 
 	if (!systemPrompt) {
+
 		console.log(SETTINGS.colors.red('Error: SYSTEM prompt cannot be empty.'));
 		process.exit(1);
 	}
 
 	if (withSystemInfo) {
+
 		const systemInfo = await getSystemInfo();
 		systemPrompt += ` You are using the ${systemInfo.user.shell} shell on the ${systemInfo.platform} (${systemInfo.type}) platform. Your OS version is ${systemInfo.version} and your system is using the ${systemInfo.eol} EOL. You are an expert on everything that you use and you do not make any mistakes`;
 	}
@@ -274,23 +319,29 @@ SYSTEM "${systemPrompt}"
 	const spinner = createSpinner('Creating model...').start();
 
 	try {
+
 		await ollama.create({
 			model: newModelName,
 			modelfile: modelfile
 		});
+
 		spinner.success({ text: `Model '${newModelName}' created successfully.` });
-	} catch (error) {
+	}
+	catch (error) {
+
 		spinner.error({ text: 'Error creating model.' });
 		process.exit(1);
 	}
 };
 
 const runModel = async (modelName) => {
+
 	const ollama = new Ollama({ host: SETTINGS.host });
 	const systemInfo = await getSystemInfo();
 	const models = await getModels('list');
 
 	if (models.length === 0) {
+
 		console.log(SETTINGS.colors.yellow('No models installed.'));
 		process.exit(1);
 	}
@@ -298,13 +349,18 @@ const runModel = async (modelName) => {
 	let selectedModel = null;
 
 	if (modelName) {
+
 		const foundModel = models.find((model) => model.name === modelName);
+
 		if (!foundModel) {
+
 			console.log(SETTINGS.colors.red(`Model '${modelName}' is not installed.`));
 			process.exit(1);
 		}
+
 		selectedModel = foundModel;
 	} else {
+
 		selectedModel = await selectModel(models, 'Please select a model to run:');
 	}
 
@@ -319,14 +375,14 @@ const runModel = async (modelName) => {
 	let chatHistory = [];
 
 	const resumePrompt = () => rl.resume() && rl.prompt();
+
 	rl.prompt();
 
 	rl.on('line', async (userInput) => {
+
 		rl.pause();
 
-		const spinner = createSpinner(
-			`${selectedModel.name} is generating a response...`
-		).start();
+		const spinner = createSpinner(`${selectedModel.name} is generating a response...`).start();
 
 		chatHistory.push({
 			role: 'user',
@@ -334,6 +390,7 @@ const runModel = async (modelName) => {
 		});
 
 		try {
+
 			const response = await ollama.chat({
 				model: selectedModel.name,
 				messages: chatHistory,
@@ -349,11 +406,14 @@ const runModel = async (modelName) => {
 			});
 
 			const formattedResponse = formatResponse(modelResponse.trim());
+
 			spinner.success({
 				text: `${SETTINGS.colors.green(`${selectedModel.name}:`)} ${formattedResponse}`
 			});
 
-		} catch (error) {
+		}
+		catch (error) {
+
 			spinner.error({ text: 'Error communicating with the Ollama API.' });
 		}
 
@@ -362,11 +422,13 @@ const runModel = async (modelName) => {
 };
 
 const cliModel = async () => {
+
 	const ollama = new Ollama({ host: SETTINGS.host });
 	const systemInfo = await getSystemInfo();
 	const models = await getModels('list');
 
 	if (models.length === 0) {
+
 		console.log(SETTINGS.colors.yellow('No models installed.'));
 		process.exit(1);
 	}
@@ -388,6 +450,7 @@ const cliModel = async () => {
 	rl.prompt();
 
 	rl.on('line', async (userInput) => {
+
 		rl.pause();
 
 		const spinner = createSpinner(`${selectedModel.name} is generating a shell command...`).start();
@@ -400,9 +463,10 @@ const cliModel = async () => {
 		});
 
 		try {
+
 			const response = await ollama.chat({
 				model: selectedModel.name,
-				messages: chatHistory, // Keep history in the chat
+				messages: chatHistory,
 				stream: false,
 				role: 'user',
 			});
@@ -432,17 +496,26 @@ const cliModel = async () => {
 			});
 
 			if (actionResponse.action === 'copy') {
+
 				await copyToClipboard(modelResponse, true);
-				rl.close();
-				process.exit(0);
-			} else if (actionResponse.action === 'new') {
-				resumePrompt();
-			} else {
-				console.log(SETTINGS.colors.yellow('Action canceled.'));
+
 				rl.close();
 				process.exit(0);
 			}
-		} catch (error) {
+			else if (actionResponse.action === 'new') {
+
+				resumePrompt();
+			}
+			else {
+
+				console.log(SETTINGS.colors.yellow('Action canceled.'));
+
+				rl.close();
+				process.exit(0);
+			}
+		}
+		catch (error) {
+
 			spinner.error({ text: 'Error generating shell command.' });
 			resumePrompt();
 		}
@@ -450,10 +523,12 @@ const cliModel = async () => {
 };
 
 const removeModel = async (modelName) => {
+
 	const ollama = new Ollama({ host: SETTINGS.host });
 	const models = await getModels('list');
 
 	if (models.length === 0) {
+
 		console.log(SETTINGS.colors.yellow('No models installed.'));
 		process.exit(1);
 	}
@@ -461,39 +536,48 @@ const removeModel = async (modelName) => {
 	let selectedModel = modelName;
 
 	if (modelName) {
+
 		if (!models.some((model) => model.name === modelName)) {
+
 			console.log(SETTINGS.colors.red(`Model '${modelName}' is not installed.`));
 			process.exit(1);
 		}
-	} else {
+	}
+	else {
+
 		selectedModel = await selectModel(
 			models,
 			'Please select a model to remove:'
 		);
 	}
 
-	await confirmAction(
-		`Are you sure you want to remove model '${selectedModel.name}'?`
-	);
+	await confirmAction(`Are you sure you want to remove model '${selectedModel.name}'?`);
 
 	log(SETTINGS.colors.green(`Removing model '${selectedModel.name}'...`));
 
 	try {
+
 		await ollama.delete({ model: selectedModel.name });
-	} catch (error) {
+	}
+	catch (error) {
+
 		console.log(SETTINGS.colors.red('Error removing model.'));
 		process.exit(1);
 	}
 };
 
 const showModel = async (modelName) => {
+
 	const ollama = new Ollama({ host: SETTINGS.host });
+
 	let selectedModel = modelName;
 
 	if (!selectedModel) {
+
 		const models = await getModels('list');
 
 		if (models.length === 0) {
+
 			console.log(SETTINGS.colors.yellow('No models installed.'));
 			process.exit(1);
 		}
@@ -507,18 +591,23 @@ const showModel = async (modelName) => {
 	log(SETTINGS.colors.green(`Showing information for model '${selectedModel.name}'...`));
 
 	try {
+
 		const info = await ollama.show({ model: selectedModel.name });
 		console.log(info);
-	} catch (error) {
+	}
+	catch (error) {
+
 		console.log(SETTINGS.colors.red('Error showing model information.'));
 		process.exit(1);
 	}
 };
 
 const pullModel = async (modelName) => {
+
 	const ollama = new Ollama({ host: SETTINGS.host });
 
 	if (!modelName) {
+
 		console.log(SETTINGS.colors.red('Error: Model name is required for pull.'));
 		process.exit(1);
 	}
@@ -528,9 +617,12 @@ const pullModel = async (modelName) => {
 	const spinner = createSpinner('Pulling model...').start();
 
 	try {
+
 		await ollama.pull({ model: modelName });
 		spinner.success({ text: 'Model pulled successfully.' });
-	} catch (error) {
+	}
+	catch (error) {
+
 		spinner.error({ text: 'Error pulling model.' });
 		process.exit(1);
 	}
