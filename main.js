@@ -5,8 +5,6 @@ import { Ollama } from 'ollama';
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { createSpinner } from 'nanospinner';
-import fs from 'fs';
-import path from 'path';
 import readline from 'readline';
 import prompts from 'prompts';
 import { highlight } from 'cli-highlight';
@@ -24,17 +22,6 @@ const SETTINGS = {
 	},
 	host: 'http://127.0.0.1:11434',
 	quiet: false
-};
-
-const CONFIG_FILE = path.join(process.env.HOME || process.env.USERPROFILE, '.ollama_script_config');
-
-const loadConfig = () => {
-
-	if (fs.existsSync(CONFIG_FILE)) {
-		const config = fs.readFileSync(CONFIG_FILE, 'utf8');
-		const configObj = JSON.parse(config);
-		SETTINGS.quiet = configObj.QUIET !== undefined ? configObj.QUIET : SETTINGS.quiet;
-	}
 };
 
 const log = (message) => {
@@ -172,12 +159,14 @@ const getModels = async (cmd) => {
 
 const selectModel = async (models, promptMessage) => {
 
+	const splitName = (name) => name.split(':')[0];
+
 	const response = await prompts({
 		type: 'select',
 		name: 'model',
 		message: SETTINGS.colors.cyan(promptMessage),
 		choices: models.map((model) => ({
-			title: `${model.name} (${model.details.parameter_size})`,
+			title: `${splitName(model.name)} (${model.details.parameter_size})`,
 			value: model
 		}))
 	});
@@ -453,7 +442,7 @@ const cliModel = async () => {
 
 		rl.pause();
 
-		const spinner = createSpinner(`${selectedModel.name} is generating a shell command...`).start();
+		const spinner = createSpinner(`${SETTINGS.colors.green(`${selectedModel.name}:`)} Generating command...`).start();
 
 		const cliPromptWithSystemInfo = cliCommandPrompt(systemInfo);
 
@@ -480,17 +469,15 @@ const cliModel = async () => {
 
 			const formattedResponse = formatResponse(modelResponse);
 
-			spinner.success({
-				text: `${SETTINGS.colors.green(`${selectedModel.name}:`)} ${formattedResponse}`,
-			});
+			spinner.success();
 
 			const actionResponse = await prompts({
 				type: 'select',
 				name: 'action',
-				message: SETTINGS.colors.yellow('What would you like to do with this command?'),
+				message: SETTINGS.colors.yellow(`${formattedResponse}`),
 				choices: [
-					{ title: 'Run a new command generation', value: 'new' },
-					{ title: 'Copy the command to clipboard', value: 'copy' },
+					{ title: 'Generate new', value: 'new' },
+					{ title: 'Copy to clipboard', value: 'copy' },
 					{ title: 'Cancel', value: 'cancel' },
 				],
 			});
@@ -627,8 +614,6 @@ const pullModel = async (modelName) => {
 		process.exit(1);
 	}
 };
-
-loadConfig();
 
 const program = new Command();
 
